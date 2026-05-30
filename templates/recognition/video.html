@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}视频识别 - 垃圾分类{% endblock %}
+
+{% block content %}
+<div style="max-width:800px;margin:0 auto;">
+    <a href="{% url 'accounts:home' %}" style="color:var(--text-muted);text-decoration:none;font-size:13px;">← 返回首页</a>
+    <h2 style="font-size:24px;font-weight:700;margin-top:12px;margin-bottom:4px;">视频识别</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:24px;">上传视频，按间隔抽帧进行垃圾分类识别</p>
+
+    <div class="glass-card">
+        <div class="upload-zone" id="upload-zone">
+            <div class="icon">🎬</div>
+            <div class="text">点击或拖拽上传视频</div>
+            <div class="hint">支持 MP4 / AVI / MOV</div>
+            <input type="file" id="file-input" accept="video/*">
+        </div>
+        <div id="video-name" style="text-align:center;margin-top:12px;color:var(--green);font-size:14px;" class="hidden"></div>
+
+        <div class="controls-row" style="justify-content:center;">
+            <label style="font-size:13px;color:var(--text-secondary);">采样间隔：</label>
+            <select class="select-custom" id="interval-select">
+                <option value="10">每 10 帧</option>
+                <option value="30" selected>每 30 帧</option>
+                <option value="60">每 60 帧</option>
+                <option value="90">每 90 帧</option>
+                <option value="120">每 120 帧</option>
+            </select>
+            <button class="btn btn-primary" id="btn-recognize" disabled>开始识别</button>
+        </div>
+    </div>
+
+    <div id="result-area" class="hidden">
+        <div class="glass-card" style="margin-top:24px;" id="summary-card"></div>
+        <h3 style="font-size:16px;font-weight:600;margin-top:24px;margin-bottom:12px;">帧识别结果</h3>
+        <div class="frames-grid" id="frames-grid"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const zone = document.getElementById('upload-zone');
+const input = document.getElementById('file-input');
+const btn = document.getElementById('btn-recognize');
+const videoName = document.getElementById('video-name');
+const resultArea = document.getElementById('result-area');
+let selectedFile = null;
+
+zone.addEventListener('click', () => input.click());
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+input.addEventListener('change', () => { if (input.files.length) handleFile(input.files[0]); });
+
+function handleFile(file) {
+    selectedFile = file;
+    videoName.textContent = '已选择：' + file.name;
+    videoName.classList.remove('hidden');
+    btn.disabled = false;
+    resultArea.classList.add('hidden');
+}
+
+btn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 识别中...';
+
+    const fd = new FormData();
+    fd.append('video', selectedFile);
+    fd.append('interval', document.getElementById('interval-select').value);
+
+    try {
+        const data = await apiPost('{% url "recognition:api_predict_video" %}', fd);
+        if (data.error) { showToast(data.error, 'error'); btn.disabled = false; btn.textContent = '开始识别'; return; }
+        renderResult(data);
+    } catch(e) {
+        showToast('网络错误', 'error');
+    }
+    btn.disabled = false;
+    btn.textContent = '开始识别';
+});
+
+function renderResult(data) {
+    resultArea.classList.remove('hidden');
+
+    const s = data.summary;
+    document.getElementById('summary-card').innerHTML = `
+        <h3 style="font-size:16px;font-weight:600;margin-bottom:12px;">识别汇总</h3>
+        <p style="font-size:13px;color:var(--text-secondary);">总帧数：${s.total_frames}，采样 ${s.sampled_frames} 帧（每 ${s.interval} 帧）</p>
+        <p style="font-size:13px;color:var(--text-secondary);margin-top:4px;">
+            主要类别：
+            ${s.top_categories.map(([cat, n]) => `<span style="color:var(--green);">${cat}</span> (${n}次)`).join(' · ')}
+        </p>
+    `;
+
+    document.getElementById('frames-grid').innerHTML = data.frames.map(f => `
+        <div class="frame-card">
+            <div class="frame-num">帧 #${f.frame}</div>
+            <div class="frame-label">${f.label}</div>
+            <div class="frame-cat">${f.category}</div>
+            <div class="frame-conf">${(f.confidence * 100).toFixed(1)}%</div>
+        </div>
+    `).join('');
+}
+</script>
+{% endblock %}

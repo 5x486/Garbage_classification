@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}首页 - 垃圾分类{% endblock %}
+
+{% block content %}
+<h2 style="font-size:28px;font-weight:700;margin-bottom:8px;">
+    欢迎回来，<span style="background:linear-gradient(90deg,#4ade80,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">{{ user.username }}</span>
+</h2>
+<p style="color:rgba(255,255,255,0.4);margin-bottom:32px;font-size:14px;">选择一种方式开始垃圾分类识别</p>
+
+<div class="entry-cards">
+    <a href="{% url 'recognition:image' %}" class="entry-card">
+        <div class="entry-icon">📷</div>
+        <div class="entry-title">图片识别</div>
+        <div class="entry-desc">上传图片 · 即刻识别</div>
+    </a>
+    <a href="{% url 'recognition:video' %}" class="entry-card">
+        <div class="entry-icon">🎬</div>
+        <div class="entry-title">视频识别</div>
+        <div class="entry-desc">上传视频 · 抽帧分析</div>
+    </a>
+    <a href="{% url 'recognition:camera' %}" class="entry-card">
+        <div class="entry-icon">📹</div>
+        <div class="entry-title">实时识别</div>
+        <div class="entry-desc">打开摄像头 · 实时检测</div>
+    </a>
+</div>
+
+<div class="glass-card">
+    <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;">最近识别记录</h3>
+    <ul class="record-list" id="recent-records">
+        <li style="color:var(--text-muted);">加载中...</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(async function() {
+    try {
+        const resp = await fetch('{% url "recognition:api_recent_records" %}');
+        const data = await resp.json();
+        const el = document.getElementById('recent-records');
+        if (!data.records || data.records.length === 0) {
+            el.innerHTML = '<li style="color:var(--text-muted);">暂无识别记录</li>';
+            return;
+        }
+        el.innerHTML = data.records.map(r => `
+            <li>
+                <span class="rec-time">${r.created_at}</span>
+                <span>${r.label}</span>
+                <span class="rec-cat">${r.category}</span>
+                <span style="font-weight:600;font-size:13px;">${(r.confidence * 100).toFixed(1)}%</span>
+            </li>
+        `).join('');
+    } catch(e) {
+        document.getElementById('recent-records').innerHTML = '<li style="color:var(--text-muted);">加载失败</li>';
+    }
+})();
+</script>
+{% endblock %}
